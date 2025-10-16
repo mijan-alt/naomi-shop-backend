@@ -33,8 +33,8 @@ export const updatePayloadProductVariantsWorkflow = createWorkflow(
       const items: Record<string, PayloadUpsertData> = {}
 
       data.productVariants.forEach((variant) => {
-        // @ts-expect-error
-        const payloadProduct = variant.product?.payload_product as PayloadCollectionItem
+       
+        const payloadProduct = (variant.product as any)?.payload_product as PayloadCollectionItem
         if (!payloadProduct) {return}
         
         if (!items[payloadProduct.id]) {
