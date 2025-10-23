@@ -3,32 +3,56 @@ import { loadEnv, defineConfig } from '@medusajs/framework/utils'
 loadEnv(process.env.NODE_ENV || 'development', process.cwd())
 
 const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY!;
+const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY;
+const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET;
 
 if (!paystackSecretKey) {
   throw new Error('PAYSTACK_SECRET_KEY is required');
 }
 
+// Check if Cloudinary is configured
+const cloudinaryConfigured = cloudinaryCloudName && cloudinaryApiKey && cloudinaryApiSecret;
 
-const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
-const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
-const cloudinaryConfigured = CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET;
-const fileServicePlugin = cloudinaryConfigured
+// File service configuration - use Cloudinary if configured, otherwise local
+const fileServiceConfig = cloudinaryConfigured
   ? {
-    resolve: `medusa-file-cloudinary`,
-    options: {
-      cloud_name: CLOUDINARY_CLOUD_NAME,
-      api_key: CLOUDINARY_API_KEY,
-      api_secret: CLOUDINARY_API_SECRET,
-      secure: true,
-    },
-  }
+      resolve: "@medusajs/medusa/file",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/file-s3",
+            id: "cloudinary",
+            options: {
+              file_url: `https://res.cloudinary.com/${cloudinaryCloudName}`,
+              access_key_id: cloudinaryApiKey,
+              secret_access_key: cloudinaryApiSecret,
+              region: "auto",
+              bucket: cloudinaryCloudName,
+              endpoint: `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}`,
+              additional_client_config: {
+                forcePathStyle: true,
+              },
+            },
+          },
+        ],
+      },
+    }
   : {
-    resolve: `@medusajs/file-local`,
-    options: {
-      upload_dir: "uploads",
-    },
-  };
+      resolve: "@medusajs/medusa/file",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/file-local",
+            id: "local",
+            options: {
+              upload_dir: "static",
+              backend_url: process.env.BACKEND_URL || "http://localhost:9000",
+            },
+          },
+        ],
+      },
+    };
 
 module.exports = defineConfig({
   projectConfig: {
@@ -40,10 +64,9 @@ module.exports = defineConfig({
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
-  
   },
   modules: [
-      {
+    {
       resolve: "./src/modules/payload",
       options: {
         serverUrl: process.env.PAYLOAD_SERVER_URL || "http://localhost:8000",
@@ -51,22 +74,19 @@ module.exports = defineConfig({
         userCollection: process.env.PAYLOAD_USER_COLLECTION || "users",
       },
     },
-
-   {
+    {
       resolve: "@medusajs/medusa/payment",
       options: {
         providers: [
-          // other payment providers like stripe, paypal etc
           {
             resolve: "medusa-payment-paystack",
             options: {
-              secret_key:paystackSecretKey,
+              secret_key: paystackSecretKey,
             } satisfies import("medusa-payment-paystack").PluginOptions,
           },
         ],
       },
     },
-
-    fileServicePlugin
+    fileServiceConfig, // Dynamically use Cloudinary or local storage
   ],
 })
